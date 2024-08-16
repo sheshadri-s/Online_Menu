@@ -1,0 +1,144 @@
+const express = require('express');
+const mongoose = require('mongoose');
+const dotenv = require('dotenv');
+const multer = require('multer');
+const path = require('path');
+const cors = require('cors');
+
+// Initialize environment variables
+dotenv.config();
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+}).then(() => console.log('MongoDB connected'))
+  .catch(err => {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
+  });
+
+// Create Express app
+const app = express();
+
+// Middleware setup
+app.use(cors());
+app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Multer setup for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  }
+});
+
+const upload = multer({ storage });
+
+// Category model
+const CategorySchema = mongoose.Schema({
+  name: {
+    type: String,
+    required: true
+  },
+  image: {
+    type: String,
+    required: true
+  }
+}, {
+  timestamps: true
+});
+
+const Category = mongoose.model('Category', CategorySchema);
+
+// Product model
+const ProductSchema = mongoose.Schema({
+  name: {
+    type: String,
+    required: true
+  },
+  price: {
+    type: Number,
+    required: true
+  },
+  image: {
+    type: String,
+    required: true
+  },
+  category: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    required: true
+  }
+}, {
+  timestamps: true
+});
+
+const Product = mongoose.model('Product', ProductSchema);
+
+// Routes for Categories
+app.post('/addCategories', upload.single('categoryImage'), async (req, res) => {
+  const { name } = req.body;
+  const image = req.file ? req.file.path : '';
+  try {
+    const newCategory = new Category({ name, image });
+    await newCategory.save();
+    res.status(201).json(newCategory);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to add category' });
+  }
+});
+
+app.get('/categories', async (req, res) => {
+  try {
+    const categories = await Category.find();
+    res.status(200).json(categories);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});
+
+// Routes for Products
+app.post('/addProducts', upload.single('productImage'), async (req, res) => {
+  const { name, price, category } = req.body;
+  const image = req.file ? req.file.path : '';
+  try {
+    const newProduct = new Product({ name, price, image, category });
+    await newProduct.save();
+    res.status(201).json(newProduct);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to add product' });
+  }
+});
+
+app.get('/api/products/:categoryId', async (req, res) => {
+  const { categoryId } = req.params;
+  try {
+    const products = await Product.find({ category: categoryId });
+    res.status(200).json(products);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+// DisplayProducts
+app.get('/displayProducts/:categoryId', async (req, res) => {
+  const { categoryId } = req.params;
+  try {
+    const products = await Product.find({ category: categoryId });
+    res.status(200).json(products);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+
+// Start the server
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
